@@ -4,6 +4,7 @@ import subprocess
 import re
 from threading import Thread
 from cmd import Cmd
+import urlparse
 
 class WGetInfo(object):
 	STATUS_REGEX = re.compile("[ \t]*(?P<data>[0-9]+)(?P<data_unit>[ KMG])[ '.']*(?P<percent>[0-9]+)%[ ]*(?P<speed>[0-9]+)(?P<speed_unit>[ KMG])[ =](?P<time>[0-9dhms ]+)")
@@ -51,6 +52,7 @@ class WGetProcess(Thread):
 		self.running = False
 		self.status = WGetProcess.STAT_IDLE
 		self.exit_status = None
+		self.finished = False
 
 	def getParams(self):
 		params = ['wget', '--progress=dot']
@@ -68,6 +70,7 @@ class WGetProcess(Thread):
 
 	def run(self):
 		self.running = True
+		self.finished = False
 
 		params = self.getParams()
 
@@ -88,6 +91,8 @@ class WGetProcess(Thread):
 				self.status = WGetProcess.STAT_FIN_GOOD
 			else:
 				self.status = WGetProcess.STAT_FIN_BAD
+
+		self.finished = True
 
 class Manager(object):
 
@@ -170,10 +175,18 @@ class Manager(object):
 			return False
 		
 		for p in processes:
-			if p.status != WGetProcess.STAT_IDLE:
+			if p.status == WGetProcess.STAT_IDLE:
 				p.start()
 
 		return True
+
+	def startAll(self):
+		for p in [p for p in self.processes if p.status == WGetProcess.STAT_IDLE]:
+			p.start()
+
+	def removeFinished(self):
+		for p in [p for p in self.processes if p.finished]:
+			self.processes.remove(p)
 
 	def remove(self, id = None, url = None):
 		if id == None and url == None:
@@ -210,9 +223,8 @@ class Manager(object):
 
 	def listProcesses(self):
 		if len(self.processes) > 0:
-			print '  id\tstatus\t\tinfo\t\turl'
 			for i, p in enumerate(self.processes):
-				print '{0:3d}\t{1}\t\t{2}\t\t{3}'.format(i, Manager.STATUS_NAMES[p.status], p.info, p.url)
+				print '{0:3d}\t{1}\t{2}\t{3}'.format(i, Manager.STATUS_NAMES[p.status], p.info, p.url)
 		else:
 			print "No downloads in list."
 	
@@ -231,6 +243,10 @@ class RGetConsole(Cmd):
 
 	def do_add(self, url):
 		self.manager.add( url )
+		return False
+
+	def do_startAll(self, line):
+		self.manager.startAll()
 		return False
 
 	def do_start(self, id):
@@ -259,6 +275,10 @@ class RGetConsole(Cmd):
 
 		return False
 
+	def do_removeFinished(self, line):
+		self.manager.removeFinished()
+		return False
+
 	def do_remove(self, id):
 		success = False
 
@@ -270,6 +290,10 @@ class RGetConsole(Cmd):
 		if not success:
 			print "Could not start Process #", id
 
+		return False
+
+	def default(self, line):
+		self.manager.add( line )
 		return False
 
 	def do_run(self, url):
