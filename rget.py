@@ -271,7 +271,7 @@ class RGetConsole(Cmd):
 			success = self.manager.stop(url = id)
 
 		if not success:
-			print "Could not start Process #", id
+			print "Could not stop Process #", id
 
 		return False
 
@@ -288,7 +288,7 @@ class RGetConsole(Cmd):
 			success = self.manager.remove(url = id)
 
 		if not success:
-			print "Could not start Process #", id
+			print "Could not remove Process #", id
 
 		return False
 
