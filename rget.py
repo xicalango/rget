@@ -8,7 +8,14 @@ import urlparse
 
 class WGetInfo(object):
 	STATUS_REGEX = re.compile("[ \t]*(?P<data>[0-9]+)(?P<data_unit>[ KMG])[ '.']*(?P<percent>[0-9]+)%[ ]*(?P<speed>[0-9]+)(?P<speed_unit>[ KMG])[ =](?P<time>[0-9dhms ]+)")
+	INFO_REGEX = re.compile("Length\: (?P<size>[0-9]+) \((?P<size_hr>[0-9]+)(?P<size_hr_unit>[ KMG])\) \[(?P<type>.*)\]")
  
+ 	FACTORS = {
+		' ': 1,
+		'K': 1024,
+		'M': 1024*1024,
+		'G': 1024*1024*1024
+	}
 
 	def __init__(self):
 		self.completeData = 0
@@ -18,23 +25,32 @@ class WGetInfo(object):
 		self.speed = 0
 		self.speed_unit = ' '
 		self.time = ''
+		self.type = ''
 	
 	def update(self, line):
 		
 		r = WGetInfo.STATUS_REGEX.search(line)
 		if r != None:
 			self.status_update(r.groupdict())
+			return
+
+		r = WGetInfo.INFO_REGEX.search(line)
+		if r != None:
+			self.info_update(r.groupdict())
+			return
+
+	def info_update(self, size):
+		self.completeData = size['size']
+		self.type = size['type']
 
 	def status_update(self, status):
-		self.data = status['data']
-		self.data_unit = status['data_unit']
-		self.process = status['percent']
-		self.speed = status['speed']
-		self.speed_unit = status['speed_unit']
+		self.data = int(status['data']) * WGetInfo.FACTORS[status['data_unit']]
+		self.process = int(status['percent'])
+		self.speed = int(status['speed']) * WGetInfo.FACTORS[status['speed_unit']]
 		self.time = status['time']
 	
 	def __str__(self):
-		return str(self.data) + self.data_unit + " (" + str(self.process) + "%)"
+		return str(self.data) + "/" + str(self.completeData) + " (" + str(self.process) + "%)"
 
 class WGetProcess(Thread):
 	STAT_IDLE = 0
@@ -74,7 +90,7 @@ class WGetProcess(Thread):
 
 		params = self.getParams()
 
-		self.proc = subprocess.Popen(params, stderr=subprocess.PIPE)
+		self.proc = subprocess.Popen(params, stderr=subprocess.PIPE, env= {'LANG': 'C'})
 
 		self.status = WGetProcess.STAT_DL
 
@@ -181,8 +197,13 @@ class Manager(object):
 		return True
 
 	def startAll(self):
+		started = False
 		for p in [p for p in self.processes if p.status == WGetProcess.STAT_IDLE]:
+			started = True
 			p.start()
+			print "Started {0}".format(p.url)
+
+		return started
 
 	def removeFinished(self):
 		for p in [p for p in self.processes if p.finished]:
@@ -294,6 +315,11 @@ class RGetConsole(Cmd):
 
 	def default(self, line):
 		self.manager.add( line )
+		return False
+
+	def emptyline(self):
+		if not self.manager.startAll():
+			self.manager.listProcesses()
 		return False
 
 	def do_dl(self, url):
