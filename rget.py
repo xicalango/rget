@@ -296,7 +296,7 @@ class RGetConsole(Cmd):
 		self.manager.add( line )
 		return False
 
-	def do_run(self, url):
+	def do_dl(self, url):
 		self.manager.addAndStart( url )
 		return False
 
