@@ -17,15 +17,15 @@ Exit by sending EOF or typing `exit`. All pending downloads are closed.
 Commands
 ========
 
-* **dl <url>** Add and start downloading *<url>*
-* **add <url>** Add *<url>* to list but don't start downloading
-* **ls** List downloads in list with their id.
-* **start <id|url>** Start an idle download given by id or url
-* **startAll** Stars all idle downloads
-* **stop <id|url>** Stops download given by id or url
-* **remove <id|url>** Removes a download from the list, stopping it when needed
-* **removeFinished** Removes all finished downloads from the list.
-* **exit** or **EOF** Exits the program, interrupting all downloads.
+* `dl [url]` Add and start downloading `[url]`
+* `add [url]` Add `[url]` to list but don't start downloading
+* `ls` List downloads in list with their id.
+* `start [id|url]` Start an idle download given by id or url
+* `startAll` Stars all idle downloads
+* `stop [id|url]` Stops download given by id or url
+* `remove [id|url]` Removes a download from the list, stopping it when needed
+* `removeFinished` Removes all finished downloads from the list.
+* `exit` or  `EOF` Exits the program, interrupting all downloads.
 
 TODO
 ====
