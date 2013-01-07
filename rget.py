@@ -20,10 +20,8 @@ class WGetInfo(object):
 	def __init__(self):
 		self.completeData = 0
 		self.data = 0
-		self.data_unit = ' '
 		self.process = 0
 		self.speed = 0
-		self.speed_unit = ' '
 		self.time = ''
 		self.type = ''
 	
@@ -48,9 +46,24 @@ class WGetInfo(object):
 		self.process = int(status['percent'])
 		self.speed = int(status['speed']) * WGetInfo.FACTORS[status['speed_unit']]
 		self.time = status['time']
+
+	def status_update_finished(self):
+		self.data = self.completeData
+		self.process = 100
+		self.speed = 0
+		self.time = '0s'
 	
 	def __str__(self):
-		return str(self.data) + "/" + str(self.completeData) + " (" + str(self.process) + "%)"
+		return "{0}/{1} ({2} %) ETA: {3}".format(self.data, self.completeData, self.process, self.time)
+	
+	def detail(self):
+		return "{0}/{1} ({2} %)\nETA: {3}\nCurrent speed: {4}/s\nType: {5}".format(
+			self.data, self.completeData,
+			self.process,
+			self.time,
+			self.speed,
+			self.type
+		)
 
 class WGetProcess(Thread):
 	STAT_IDLE = 0
@@ -59,7 +72,7 @@ class WGetProcess(Thread):
 	STAT_FIN_BAD = 3
 	STAT_FIN_USER = 4
 
-	def __init__(self, url, outputDir = None, cont = False):
+	def __init__(self, url, outputDir = None, cont = False, post_hook = None, pre_hook = None):
 		Thread.__init__(self, name='WGet ' + url)
 		self.url = url
 		self.outputDir = outputDir
@@ -69,6 +82,8 @@ class WGetProcess(Thread):
 		self.status = WGetProcess.STAT_IDLE
 		self.exit_status = None
 		self.finished = False
+		self.post_hook = post_hook
+		self.pre_hook = pre_hook
 
 	def getParams(self):
 		params = ['wget', '--progress=dot']
@@ -89,9 +104,12 @@ class WGetProcess(Thread):
 		self.finished = False
 
 		params = self.getParams()
-
+		
 		self.proc = subprocess.Popen(params, stderr=subprocess.PIPE, env= {'LANG': 'C'})
 
+		if self.pre_hook != None:
+			self.pre_hook(self)
+	
 		self.status = WGetProcess.STAT_DL
 
 		while self.proc.poll() == None and self.running:
@@ -105,6 +123,9 @@ class WGetProcess(Thread):
 			self.running = False
 			if self.proc.returncode == 0:
 				self.status = WGetProcess.STAT_FIN_GOOD
+				self.info.status_update_finished()
+				if self.post_hook != None:
+					self.post_hook(self)
 			else:
 				self.status = WGetProcess.STAT_FIN_BAD
 
@@ -123,8 +144,20 @@ class Manager(object):
 	def __init__(self):
 		self.processes = []
 
+	def _dl_pre_hook(self, process):
+		print "Started {0}".format(process.url)
+
+	def _dl_post_hook(self, process):
+		print "Finished {0}".format(process.url)
+
 	def add(self, url, outputDir = None, cont = False):
-		new_process = WGetProcess( url, outputDir = outputDir, cont = cont )
+		new_process = WGetProcess( 
+			url, 
+			outputDir = outputDir, 
+			cont = cont,
+			pre_hook = self._dl_pre_hook,
+			post_hook = self._dl_post_hook
+			)
 		self.processes.append( new_process )
 		return new_process
 
@@ -201,7 +234,6 @@ class Manager(object):
 		for p in [p for p in self.processes if p.status == WGetProcess.STAT_IDLE]:
 			started = True
 			p.start()
-			print "Started {0}".format(p.url)
 
 		return started
 
@@ -241,13 +273,35 @@ class Manager(object):
 			self.processes.remove(p)
 
 		return True
+		
+	def printProcessInfo(self,i,p):
+		print '{0:3d}\t{1}\t{2}\t{3}'.format(i, Manager.STATUS_NAMES[p.status], p.info, p.url)
 
 	def listProcesses(self):
 		if len(self.processes) > 0:
 			for i, p in enumerate(self.processes):
-				print '{0:3d}\t{1}\t{2}\t{3}'.format(i, Manager.STATUS_NAMES[p.status], p.info, p.url)
+				self.printProcessInfo(i,p)
 		else:
 			print "No downloads in list."
+
+	def isValidId(self, id):
+		return id >= 0 or id < len(self.processes)
+
+	def printDetail(self, id = None, url = None):
+		if id == None and url == None:
+			return False
+
+		processes = []
+
+		if id != None and self.isValidId(id):
+			processes = [self.processes[id]]
+		else:
+			processes = self.getProcessesByUrl(url)
+			
+		for i,p in enumerate(processes):
+			print '{0:3d}\t{1}\t{2}'.format(i, Manager.STATUS_NAMES[p.status], p.url)
+			print p.info.detail()
+
 	
 	def shutdown(self):
 		for p in self.processes:
@@ -296,9 +350,15 @@ class RGetConsole(Cmd):
 
 		return False
 
+	def do_gc(self, line):
+		return self.do_removeFinished(line)
+
 	def do_removeFinished(self, line):
 		self.manager.removeFinished()
 		return False
+
+	def do_rm(self, id_url):
+		return self.do_remove(id_url)
 
 	def do_remove(self, id):
 		success = False
@@ -311,6 +371,14 @@ class RGetConsole(Cmd):
 		if not success:
 			print "Could not remove Process #", id
 
+		return False
+
+	def do_detail(self, id_url):
+		try:
+			self.manager.printDetail(id = int(id_url))
+		except ValueError:
+			self.manager.printDetail(url = int(id_url))
+			
 		return False
 
 	def default(self, line):
